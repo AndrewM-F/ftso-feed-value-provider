@@ -51,6 +51,8 @@ docker-compose down
 
 ### Available Docker Scripts
 
+#### Local Development (docker-compose.yml)
+
 | Script                                   | Command            | Description                          |
 | ---------------------------------------- | ------------------ | ------------------------------------ |
 | `pnpm docker:build`                      | Build Docker image | Builds the image without starting    |
@@ -64,39 +66,99 @@ docker-compose down
 | `pnpm docker:rebuild`                    | Full rebuild       | Stops, rebuilds from scratch, starts |
 | `pnpm docker:shell`                      | Access shell       | Opens shell inside container         |
 
-## 🌐 Running from Registry
+#### Production/VM (docker-compose.registry.yml)
+
+| Script                            | Description                                |
+| --------------------------------- | ------------------------------------------ |
+| `pnpm docker:registry:up`         | Pull and start from registry               |
+| `pnpm docker:registry:down`       | Stop registry containers                   |
+| `pnpm docker:registry:pull`       | Pull latest image from registry            |
+| `pnpm docker:registry:logs`       | View logs from registry deployment         |
+| `pnpm docker:registry:restart`    | Restart registry container                 |
+| `pnpm docker:registry:monitoring` | Start with Prometheus + Grafana monitoring |
+
+## 🌐 Running from Registry (Production/VM)
 
 The application is automatically published to GitHub Container Registry (GHCR)
 via GitHub Actions.
 
-### Quick Run from GHCR
+### Using docker-compose.registry.yml (Recommended)
+
+This is the recommended approach for production and VM deployments:
 
 ```bash
-# Pull and run the latest image
-docker run --rm -it \
-  --publish "0.0.0.0:3101:3101" \
-  --publish "0.0.0.0:9090:9090" \
-  ghcr.io/niftyleague/ftso-feed-value-provider:latest
+# Standard deployment
+pnpm docker:registry:up
+
+# VM deployment with host network (better performance)
+NETWORK_MODE=host pnpm docker:registry:up
+
+# With custom resources
+MEMORY_LIMIT=2G CPU_LIMIT=2.0 pnpm docker:registry:up
+
+# View logs
+pnpm docker:registry:logs
+
+# Stop
+pnpm docker:registry:down
 ```
 
-### If Image is Private
+### Using Docker Compose Directly
 
 ```bash
-# Login to GHCR (requires GitHub Personal Access Token)
-echo "YOUR_GITHUB_TOKEN" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+# Standard deployment
+docker-compose -f docker-compose.registry.yml up -d
 
-# Then pull and run
-docker pull ghcr.io/niftyleague/ftso-feed-value-provider:latest
-docker run --rm -it --publish "0.0.0.0:3101:3101" ghcr.io/niftyleague/ftso-feed-value-provider:latest
+# VM deployment with host network
+NETWORK_MODE=host docker-compose -f docker-compose.registry.yml up -d
+
+# With custom tag
+TAG=v1.2.3 docker-compose -f docker-compose.registry.yml up -d
+
+# With monitoring stack (Prometheus + Grafana)
+docker-compose -f docker-compose.registry.yml --profile monitoring up -d
+
+# View logs
+docker-compose -f docker-compose.registry.yml logs -f
+
+# Stop
+docker-compose -f docker-compose.registry.yml down
 ```
+
+### VM Deployment Workflow
+
+On your VM:
+
+```bash
+# 1. Clone repo (just for the docker-compose.registry.yml file)
+git clone <repo-url> && cd <repo>
+
+# 2. Login to GHCR (if image is private)
+echo "YOUR_GITHUB_TOKEN" | docker login ghcr.io -u YOUR_USERNAME --password-stdin
+
+# 3. Deploy with desired configuration
+NETWORK_MODE=host docker-compose -f docker-compose.registry.yml up -d
+```
+
+### Configuration Options
+
+All settings can be overridden via environment variables:
+
+| Variable       | Default      | Description                       |
+| -------------- | ------------ | --------------------------------- |
+| `TAG`          | `latest`     | Image tag to pull                 |
+| `NETWORK_MODE` | `bridge`     | Network mode (`bridge` or `host`) |
+| `API_PORT`     | `3101`       | API port mapping                  |
+| `METRICS_PORT` | `9090`       | Metrics port mapping              |
+| `NODE_ENV`     | `production` | Node environment                  |
+| `LOG_LEVEL`    | `warn`       | Logging level                     |
+| `MEMORY_LIMIT` | `1G`         | Memory limit                      |
+| `CPU_LIMIT`    | `1.0`        | CPU limit                         |
 
 ### Available Tags
 
 - `latest` - Latest build from main branch
 - `v1.0.0`, `v1.0.1`, etc. - Specific version releases
-
-**For detailed registry documentation**, see
-[DOCKER-REGISTRY.md](./DOCKER-REGISTRY.md)
 
 ## 🏗️ Dockerfile Architecture
 
@@ -279,9 +341,8 @@ Key environment variables in `docker-compose.yml`:
 environment:
   - NODE_ENV=production # Production mode
   - LOG_LEVEL=warn # Logging level
-  - VALUE_PROVIDER_CLIENT_PORT=3101
-  - MONITORING_ENABLED=true
-  - ENABLE_FILE_LOGGING=false # Console only in Docker
+  - APP_PORT=3101 # Value provider client port
+  # Most settings use optimized defaults from environment.constants.ts
 ```
 
 ### Volumes
@@ -462,9 +523,9 @@ docker-compose up -d
 
 ## 📚 Additional Resources
 
-- [.env.example](./.env.example) - All available environment variables
-- [package.json](./package.json) - Project dependencies
-- [test-docker.sh](./test-docker.sh) - Automated testing script
+- [.env.example](../.env.example) - All available environment variables
+- [package.json](../package.json) - Project dependencies
+- [scripts/test/docker.sh](../scripts/test/docker.sh) - Automated testing script
 
 ## 🆘 Common Issues
 
